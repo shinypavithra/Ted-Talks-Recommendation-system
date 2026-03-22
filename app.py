@@ -15,7 +15,6 @@ st.set_page_config(
     layout="wide",
 )
 
-
 st.markdown("""
 <style>
     /* Page bg: charcoal black */
@@ -170,7 +169,7 @@ CACHE_FILE = 'ted_preprocessed_cache.pkl'
 
 @st.cache_resource
 def load_everything():
-    # Load vectorizer from pickle
+    
     with open('ted_talks_recommendation.pkl', 'rb') as f:
         vectorizer = pickle.load(f)[0]
 
@@ -183,7 +182,7 @@ def load_everything():
             'main_speaker', 'title', 'description',
             'tags', 'url', 'views', 'speaker_occupation'
         ]].dropna()
-       
+        
         df['content'] = (
             df['title'] + ' ' +
             df['description'] + ' ' +
@@ -191,7 +190,6 @@ def load_everything():
         ).apply(preprocess_text)
         df.to_pickle(CACHE_FILE)  
 
-    
     all_vectors = vectorizer.transform(df['content'])
 
     return vectorizer, df, all_vectors
@@ -207,7 +205,6 @@ def recommend_talks(user_query, vectorizer, df, all_vectors, n_results):
     return results.sort_values('similarity', ascending=False).head(n_results)
 
 
-
 try:
     vectorizer, df, all_vectors = load_everything()
     model_loaded = True
@@ -217,6 +214,7 @@ except Exception as e:
 
 
 
+with st.sidebar:
     st.markdown("## TED Recommender")
     st.markdown("---")
     st.markdown("### Settings")
@@ -235,7 +233,6 @@ except Exception as e:
     for ex in examples:
         if st.button(ex, key=ex):
             st.session_state['query'] = ex
-
 
 
 st.markdown("# TED Talks Recommendation System")
@@ -292,7 +289,7 @@ if search_clicked:
             similarity_pct = round(row['similarity'] * 100, 1)
             rank_color     = rank_colors[i % len(rank_colors)]
 
-            
+           
             title      = row['title']
             speaker    = row['main_speaker']
             url        = row['url']
@@ -335,6 +332,7 @@ if search_clicked:
                 st.progress(float(row['similarity']))
                 st.markdown("")
 
+       
         st.markdown("---")
         col_a, col_b, col_c = st.columns(3)
         with col_a:
