@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
-import pickle
 import string
 import nltk
-import os
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
 
 st.set_page_config(
     page_title="TED Talks Recommender",
@@ -15,9 +13,9 @@ st.set_page_config(
     layout="wide",
 )
 
+
 st.markdown("""
 <style>
-    /* Page bg: charcoal black */
     .stApp { background-color: #121212; }
 
     body, p, div, span, label { color: #e0e8ef !important; }
@@ -30,7 +28,6 @@ st.markdown("""
     }
     h2, h3 { color: #e0e8ef !important; }
 
-    /* Sidebar: dark teal */
     section[data-testid="stSidebar"] {
         background-color: #0d1f2d !important;
         border-right: 1px solid #1a3a4a !important;
@@ -52,7 +49,6 @@ st.markdown("""
     }
     .stButton > button:hover { background-color: #09616f !important; }
 
-    /* Input: dark teal surface */
     .stTextArea textarea {
         background-color: #0d1f2d !important;
         color: #e0e8ef !important;
@@ -74,7 +70,6 @@ st.markdown("""
     hr { border-color: #1a3a4a !important; }
     .stCaption, small { color: #7aabb8 !important; }
 
-    /* Cards: dark teal surface on charcoal bg */
     .talk-card {
         background: #0d1f2d;
         border-radius: 14px;
@@ -165,42 +160,37 @@ def preprocess_text(text):
 
 
 
-CACHE_FILE = 'ted_preprocessed_cache.pkl'
-
 @st.cache_resource
 def load_everything():
+    # Load dataset
+    df = pd.read_csv('ted_main.csv')
+    df = df[[
+        'main_speaker', 'title', 'description',
+        'tags', 'url', 'views', 'speaker_occupation'
+    ]].dropna()
+
     
-    with open('ted_talks_recommendation.pkl', 'rb') as f:
-        vectorizer = pickle.load(f)[0]
+    df['content'] = (
+        df['title'] + ' ' +
+        df['description'] + ' ' +
+        df['tags']
+    ).apply(preprocess_text)
+
+
+    vectorizer = TfidfVectorizer(analyzer='word')
+    vectorizer.fit(df['content'])
 
    
-    if os.path.exists(CACHE_FILE):
-        df = pd.read_pickle(CACHE_FILE)
-    else:
-        df = pd.read_csv('ted_main.csv')
-        df = df[[
-            'main_speaker', 'title', 'description',
-            'tags', 'url', 'views', 'speaker_occupation'
-        ]].dropna()
-        
-        df['content'] = (
-            df['title'] + ' ' +
-            df['description'] + ' ' +
-            df['tags']
-        ).apply(preprocess_text)
-        df.to_pickle(CACHE_FILE)  
-
     all_vectors = vectorizer.transform(df['content'])
 
     return vectorizer, df, all_vectors
 
 
-
 def recommend_talks(user_query, vectorizer, df, all_vectors, n_results):
-    cleaned   = preprocess_text(user_query)
-    user_vec  = vectorizer.transform([cleaned])
-    scores    = cosine_similarity(user_vec, all_vectors)[0]
-    results   = df.copy()
+    cleaned  = preprocess_text(user_query)
+    user_vec = vectorizer.transform([cleaned])
+    scores   = cosine_similarity(user_vec, all_vectors)[0]
+    results  = df.copy()
     results['similarity'] = scores
     return results.sort_values('similarity', ascending=False).head(n_results)
 
@@ -213,15 +203,19 @@ except Exception as e:
     load_error   = str(e)
 
 
-
 with st.sidebar:
     st.markdown("## TED Recommender")
     st.markdown("---")
     st.markdown("### Settings")
-    n_results = st.slider("Number of recommendations", min_value=3, max_value=15, value=5)
+    n_results = st.slider(
+        "Number of recommendations",
+        min_value=3,
+        max_value=15,
+        value=5
+    )
 
     st.markdown("---")
-
+    
     st.markdown("### Example queries")
     examples = [
         "Climate change and global health",
@@ -235,14 +229,15 @@ with st.sidebar:
             st.session_state['query'] = ex
 
 
+
 st.markdown("# TED Talks Recommendation System")
 st.markdown("Describe a topic you're curious about and get matched to the most relevant TED Talks.")
 st.markdown("---")
 
 if not model_loaded:
     st.error(
-        f"Could not load model files. Make sure `ted_main.csv` and "
-        f"`ted_talks_recommendation.pkl` are in the same folder as `app.py`."
+        f"Could not load ted_main.csv. "
+        f"Make sure it is in the same folder as app.py."
         f"\n\nError: {load_error}"
     )
     st.stop()
@@ -332,13 +327,13 @@ if search_clicked:
                 st.progress(float(row['similarity']))
                 st.markdown("")
 
-       
+        # ── Summary stats ──
         st.markdown("---")
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            st.metric("Top match score", f"{round(results.iloc[0]['similarity']*100,1)}%")
+            st.metric("Top match score",    f"{round(results.iloc[0]['similarity']*100,1)}%")
         with col_b:
-            st.metric("Talks searched", f"{len(df):,}")
+            st.metric("Talks searched",     f"{len(df):,}")
         with col_c:
             avg_views = int(results['views'].mean()) if 'views' in results.columns else 0
             st.metric("Avg views (results)", f"{avg_views:,}" if avg_views else "N/A")
